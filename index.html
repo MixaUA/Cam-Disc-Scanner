@@ -1,0 +1,1013 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cam Disc Scanner — Radar Slider</title>
+<style>
+* { box-sizing: border-box; }
+
+html, body {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #0b3d63;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+  font-family: sans-serif;
+  color: #fff;
+  padding: 12px;
+}
+
+input { display: none; }
+
+.frame {
+  width: min(460px, 92vw);
+  display: flex;
+  flex-direction: column;
+}
+
+.top, .bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: max-height 0.5s ease, opacity 0.4s ease;
+  gap: 14px;
+}
+
+.handle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  width: 100%;
+  flex-shrink: 0;
+  height: 60px;
+  margin: 30px 0;
+}
+
+.line {
+  width: 60%;
+  height: 2px;
+  background: #fff;
+  margin: 4px 0;
+  flex-shrink: 0;
+}
+
+.arrow {
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 6px 10px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+/* старт: брова вгорі (top закритий), сканер (bottom) відкрито */
+#up:checked ~ .frame .top {
+  max-height: 0;
+  opacity: 0;
+}
+#up:checked ~ .frame .bottom {
+  max-height: 480px;
+  opacity: 1;
+}
+
+/* брова опускається: розпирає top (результат) вниз своїм вмістом, ховає bottom (сканер) */
+#down:checked ~ .frame .top {
+  max-height: 3000px; /* достатньо для довгого опису кулачка */
+  opacity: 1;
+}
+#down:checked ~ .frame .bottom {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* ===== СКАНЕР ===== */
+
+.scan-overlay {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+}
+
+.scan-placeholder,
+.scan-live {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.scan-placeholder {
+  border: 1px solid rgba(255,255,255,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+}
+.corner.tl { top: 8px; left: 8px; border-top: 2px solid #fff; border-left: 2px solid #fff; }
+.corner.tr { top: 8px; right: 8px; border-top: 2px solid #fff; border-right: 2px solid #fff; }
+.corner.bl { bottom: 8px; left: 8px; border-bottom: 2px solid #fff; border-left: 2px solid #fff; }
+.corner.br { bottom: 8px; right: 8px; border-bottom: 2px solid #fff; border-right: 2px solid #fff; }
+
+.placeholder-triangle {
+  width: 55%;
+  height: auto;
+  max-width: 170px;
+}
+
+.placeholder-label {
+  font-family: monospace;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.scan-live {
+  display: none;
+}
+.scan-live.active {
+  display: block;
+}
+
+video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 1px solid rgba(255,255,255,0.4);
+  z-index: 1;
+}
+
+#decCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.scan-line {
+  position: absolute;
+  left: 3%;
+  right: 3%;
+  height: 2px;
+  background: rgba(255,255,255,0.7);
+  z-index: 3;
+  top: 5%;
+  animation: scanmove 2s ease-in-out infinite;
+}
+
+@keyframes scanmove {
+  0%, 100% { top: 5%; }
+  50% { top: 95%; }
+}
+
+.scan-btn {
+  height: 40px;
+  padding: 0 26px;
+  font-size: 13px;
+  font-family: sans-serif;
+  letter-spacing: 0.05em;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.6);
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) and (pointer: fine) {
+  .scan-btn:hover {
+    background: rgba(255,255,255,0.1);
+  }
+}
+.scan-btn.pressed {
+  background: rgba(255,255,255,0.25);
+}
+.scan-btn.active { background: #fff; color: #0b3d63; }
+
+.scan-status {
+  font-size: 11px;
+  font-family: monospace;
+  color: rgba(255,255,255,0.6);
+  min-height: 14px;
+}
+
+/* ===== РЕЗУЛЬТАТ ===== */
+
+.result-panel {
+  width: 100%;
+  padding: 24px 20px;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.field {
+  margin-bottom: 10px;
+  text-align: left;
+  font-family: monospace;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.field:last-child { margin-bottom: 0; }
+
+.field-label {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.field-value {
+  color: rgba(255,255,255,0.75);
+}
+
+.field-output .field-value {
+  font-style: italic;
+}
+
+.type-cursor {
+  display: inline-block;
+  color: rgba(255,255,255,0.75);
+  font-style: normal;
+  animation: caretBlink 0.85s steps(1) infinite;
+}
+.type-cursor.done,
+.type-cursor.idle {
+  display: none;
+}
+
+/* ===== КНОПКА МОВИ ===== */
+
+.lang-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.85);
+  background: transparent;
+  color: #fff;
+  font-family: monospace;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  transition: background 0.2s ease;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.lang-toggle:focus,
+.lang-toggle:focus-visible {
+  outline: none;
+}
+.lang-toggle:active {
+  background: transparent;
+}
+.lang-toggle.pressed {
+  background: rgba(255,255,255,0.25);
+}
+@media (hover: hover) {
+  .lang-toggle:hover {
+    background: rgba(255,255,255,0.1);
+  }
+}
+
+@keyframes caretBlink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+</style>
+</head>
+<body>
+
+<input type="radio" name="m" id="up" checked>
+<input type="radio" name="m" id="down">
+
+<button class="lang-toggle" id="langToggle" onclick="toggleLang(this)">UA</button>
+
+<div class="frame">
+
+  <div class="top" id="resultBox"></div>
+
+  <div class="handle">
+    <label for="up" class="arrow" onclick="onUpArrow()">▲</label>
+    <div class="line"></div>
+    <label for="down" class="arrow" onclick="onDownArrow()">▼</label>
+  </div>
+
+  <div class="bottom">
+    <div class="scan-overlay">
+      <div class="scan-placeholder" id="scanPlaceholder">
+        <span class="corner tl"></span>
+        <span class="corner tr"></span>
+        <span class="corner bl"></span>
+        <span class="corner br"></span>
+        <svg class="placeholder-triangle" viewBox="0 0 200 180">
+          <polygon points="100,15 185,165 15,165" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2" stroke-dasharray="7 7"/>
+          <circle cx="100" cy="15" r="3" fill="rgba(255,255,255,0.6)"/>
+          <circle cx="185" cy="165" r="3" fill="rgba(255,255,255,0.6)"/>
+          <circle cx="15" cy="165" r="3" fill="rgba(255,255,255,0.6)"/>
+        </svg>
+        <div class="placeholder-label" id="placeholderLabel">Кулачковий сканер</div>
+      </div>
+      <div class="scan-live" id="scanLive">
+        <video id="camVideo" autoplay playsinline muted></video>
+        <canvas id="decCanvas" width="340" height="340"></canvas>
+        <div class="scan-line"></div>
+      </div>
+    </div>
+    <button class="scan-btn" id="scanBtn" onclick="toggleScan(this)">Сканувати</button>
+    <div class="scan-status" id="scanStatus"></div>
+  </div>
+
+</div>
+
+<script>
+/* ===== ПЕРЕКЛАДИ ===== */
+const I18N = {
+  uk: {
+    placeholderLabel: 'Кулачковий сканер',
+    scanBtnScan: 'Сканувати',
+    scanBtnStop: 'Завершити',
+    statusSearchingAnchors: 'Пошук якорів...',
+    statusStabilizing: 'Стабілізація геометрії...',
+    statusRawNoise: 'Сирий шум, шукаю патерн...',
+    statusCandidate: (idx, cur, total) => `Кандидат #${idx} (${cur}/${total})`,
+    statusCameraError: (msg) => `Помилка камери: ${msg}`,
+    fieldNumber: 'Номер:',
+    fieldStatus: 'Статус:',
+    fieldOutput: 'Вивід:',
+    emptyNumber: 'не знайдено',
+    emptyStatus: 'очікую',
+    emptyOutput: 'відскануй знайдене креслення і дізнайся його можливості. Уважно прочитай характеристики перед застосуванням.',
+    statusRecognized: 'розпізнано',
+    outputUnknownCode: 'можливості цього креслення не розпізнані. Не рекомендується до застосування.',
+    db: {
+      0: "Початок усього — тиша перед першим словом.",
+      7: "Ліс дихає разом з тобою, варто лише зупинитись.",
+      13: "Кожна крапля дощу несе своє таємне ім'я.",
+      42: "Відповідь на всі питання Всесвіту знайшлася в кляксі!",
+      43: "Магія криється в деталях, які ніхто не помічає.",
+      44: "Шляхетна структура хвиль тримає інформаційне поле."
+    }
+  },
+  en: {
+    placeholderLabel: 'Cam Disc Scanner',
+    scanBtnScan: 'Scan',
+    scanBtnStop: 'Stop',
+    statusSearchingAnchors: 'Searching anchors...',
+    statusStabilizing: 'Stabilizing geometry...',
+    statusRawNoise: 'Raw noise, seeking pattern...',
+    statusCandidate: (idx, cur, total) => `Candidate #${idx} (${cur}/${total})`,
+    statusCameraError: (msg) => `Camera error: ${msg}`,
+    fieldNumber: 'Number:',
+    fieldStatus: 'Status:',
+    fieldOutput: 'Output:',
+    emptyNumber: 'not found',
+    emptyStatus: 'waiting',
+    emptyOutput: "scan the cam disc you've found to reveal what it can do. Read its properties carefully before use.",
+    statusRecognized: 'recognized',
+    outputUnknownCode: "this drawing's capabilities have not been identified. Not recommended for use.",
+    db: {
+      0: "Before the first word, there was only silence — and that is where everything begins.",
+      7: "Pause for a moment, and you'll feel the forest breathing with you.",
+      13: "Every raindrop falls carrying a secret name of its own.",
+      42: "The answer to everything in the Universe was hiding in an inkblot all along!",
+      43: "Magic lives in the details that no one bothers to notice.",
+      44: "A graceful lattice of waves holds the whole information field together."
+    }
+  }
+};
+
+let currentLang = 'uk';
+let lastScannedIndex = null; // null = ще нічого не відскановано (порожній стан)
+
+function toggleLang(btn) {
+  currentLang = currentLang === 'uk' ? 'en' : 'uk';
+  applyLang();
+  if (btn) {
+    btn.blur();
+    btn.classList.add('pressed');
+    setTimeout(() => btn.classList.remove('pressed'), 180);
+  }
+}
+
+function applyLang() {
+  const t = I18N[currentLang];
+
+  document.getElementById('langToggle').textContent = currentLang.toUpperCase();
+  document.getElementById('placeholderLabel').textContent = t.placeholderLabel;
+  document.getElementById('scanBtn').textContent = scanning ? t.scanBtnStop : t.scanBtnScan;
+  if (!scanning) document.getElementById('scanStatus').textContent = '';
+
+  if (lastScannedIndex !== null) {
+    setResultData(lastScannedIndex);
+  } else {
+    setEmptyData();
+  }
+
+  // якщо панель результату зараз відкрита — перезапускаємо друк новою мовою
+  if (document.getElementById('down').checked) {
+    playReveal();
+  }
+}
+
+
+const N_DATA = 12;
+
+const VALID_CODES = [];
+(function initValidCodes() {
+  for (let code = 0; code < 4096; code++) {
+    const bits = [];
+    for (let i = 11; i >= 0; i--) bits.push((code >> i) & 1);
+    let hasTriple = false;
+    for (let i = 0; i < 12; i++) {
+      const b0 = bits[i], b1 = bits[(i + 1) % 12], b2 = bits[(i + 2) % 12];
+      if (b0 === b1 && b1 === b2) { hasTriple = true; break; }
+    }
+    if (!hasTriple) VALID_CODES.push(code);
+  }
+})();
+
+let camStream = null, scanTimer = null, scanning = false;
+let scanHistory = [];
+const CONFIRM_STREAK = 3; // скільки однакових зчитувань підряд треба для фіксації
+
+/* Буфер "відвіданих" пікселів для flood-fill у tryDecode. Раніше створювався
+   заново (new Uint8Array(W*H)) на кожному кадрі — це ~115КБ виділення пам'яті
+   4.5 рази на секунду, зайве навантаження на збирач сміття, особливо помітне
+   на слабших телефонах. Тепер буфер один на весь час роботи сканера і просто
+   обнуляється (.fill(0)) щокадру — та сама поведінка, менше сміття. */
+let visitedBuffer = new Uint8Array(0);
+
+/* ================================================================
+   ОРІЄНТАЦІЯ ДИСКА: обмеження кута повороту
+   Диски в книжці завжди друкуються в одній орієнтації (текст сторінки
+   задає напрямок), тож "нижній" якір трикутника очікується десь внизу
+   кадру. Це дозволяє відкидати кандидатів-трикутників, повернутих
+   під неможливим для цієї книжки кутом — менше хибних спрацювань
+   від випадкового шуму на кадрі.
+   ================================================================ */
+
+// 90° (π/2) = "низ" трикутника точно під центром кадру (вниз по Y)
+const EXPECTED_ROTATION_RAD = Math.PI / 2;
+
+// Допустиме відхилення в градусах в обидва боки від очікуваного напрямку.
+// Задача згадувала діапазон ~39–45°, тут середнє значення — легко
+// підкрутити під реальні тести з книжкою, не займаючи інший код.
+const MAX_ROTATION_DEVIATION_DEG = 40;
+const MAX_ROTATION_DEVIATION_RAD = (MAX_ROTATION_DEVIATION_DEG * Math.PI) / 180;
+
+/* ================================================================
+   РОЗМІР ТРИКУТНИКА: нижня і верхня межа
+   Нижня межа (MIN) вже була в коді як "avg < 40" — відсіює випадковий
+   дрібний шум, що ніколи не утворить трикутник такого розміру, як
+   справжні якорі диска.
+   Верхня межа (MAX) — нова: якщо диск піднесли впритул до камери,
+   трикутник якорів може вилізти за межі кадру (340×340), і тоді його
+   "центроїди" рахуються по обрізаних, неповних плямах — це вже не
+   реальна геометрія диска, а спотворений артефакт близькості. Замість
+   намагатися розпізнати щось із таких спотворених даних, простіше й
+   надійніше відкинути кандидата одразу — це тільки один додатковий
+   порівняльний вираз у тому ж переборі трійок, ціна практично нульова.
+   ================================================================ */
+const MIN_TRIANGLE_SIDE_PX = 40;
+const MAX_TRIANGLE_SIDE_PX = 300; // ~88% від розміру канвасу (340px)
+
+/* ================================================================
+   ПОЛЯРНІСТЬ ДИСКА: темне на світлому чи світле на темному
+   Диск за задумом тепер друкується як креслення — біла руна на
+   темно-синьому тлі, замість чорного на кремовому. Вся детекція
+   в tryDecode() побудована на порозі яскравості (THRESH), і напрямок
+   порівняння ("шукаємо темніше за поріг" чи "шукаємо світліше за
+   поріг") залежить рівно від цього одного прапорця.
+
+   'light' — шукаємо світлі мітки (руна+якорі) на темному тлі (новий варіант)
+   'dark'  — шукаємо темні мітки на світлому тлі (старий варіант, чорне на кремовому)
+
+   Це не перевірено наживо (немає світла й камери під рукою на момент
+   правки), тож якщо на реальному диску розпізнавання поводитиметься
+   гірше — досить повернути значення назад на 'dark', решта коду не
+   зміниться: THRESH, isMark() та isMarkLoose() нижче автоматично
+   підлаштовуються під обране значення.
+   ================================================================ */
+const DISC_POLARITY = 'dark';
+
+/* ================================================================
+   ТРЕКІНГ КАДРУ (експериментально, вимкнено за замовчуванням)
+   Замість пошуку трикутника по всій площині кадру щоразу, трекінг
+   пам'ятає координати центру з попереднього вдалого кадру і на
+   наступному кадрі шукає тільки в невеликому радіусі навколо неї.
+   Це і швидше, і стабільніше (менше "стрибків" на випадковий шум
+   в іншому кутку екрана). Якщо кілька кадрів поспіль нічого не
+   знайдено в цьому радіусі — трекінг "здається" і повертається до
+   повного пошуку по всьому кадру.
+
+   ВАЖЛИВО: стара логіка повного пошуку нікуди не зникла і лишається
+   робочим фолбеком — просто перемкни TRACKING_ENABLED назад у false,
+   якщо на реальному диску трекінг поводитиметься нестабільно.
+   ================================================================ */
+const TRACKING_ENABLED = false; // <- єдиний перемикач для ввімкнення/вимкнення трекінгу
+
+const TRACKING_SEARCH_RADIUS = 70;  // px навколо попереднього центру, де шукаємо далі
+const TRACKING_LOST_AFTER = 5;      // скільки кадрів поспіль без знахідки, перш ніж скинути трекінг
+
+let trackedCenter = null;   // {x, y} останньої вдалої позиції центру трикутника, або null
+let trackedMissCount = 0;   // скільки кадрів поспіль трекінг нічого не знайшов у своєму радіусі
+
+/* скидає стан трекінгу — викликається щоразу, коли сканування зупиняється/стартує заново */
+function resetTracking() {
+  trackedCenter = null;
+  trackedMissCount = 0;
+}
+
+/* повертає різницю двох кутів (у радіанах) у межах (-π, π], враховуючи "перехід через нуль" */
+function angleDiffRad(a, b) {
+  let diff = a - b;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return diff;
+}
+
+/* фіксує успішну знахідку трикутника для трекінгу наступного кадру */
+function handleTrackingHit(cx, cy) {
+  if (!TRACKING_ENABLED) return;
+  trackedCenter = { x: cx, y: cy };
+  trackedMissCount = 0;
+}
+
+/* фіксує невдалий кадр; після TRACKING_LOST_AFTER невдач підряд трекінг
+   скидається і наступний виклик tryDecode знову шукатиме по всьому кадру */
+function handleTrackingMiss() {
+  if (!TRACKING_ENABLED || !trackedCenter) return;
+  trackedMissCount++;
+  if (trackedMissCount >= TRACKING_LOST_AFTER) {
+    resetTracking();
+  }
+}
+
+function toggleScan(btn) {
+  if (scanning) stopScan(); else startScan();
+  if (btn) {
+    btn.blur();
+    btn.classList.add('pressed');
+    setTimeout(() => btn.classList.remove('pressed'), 180);
+  }
+}
+
+async function startScan() {
+  const video = document.getElementById('camVideo');
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 640 } }
+    });
+    video.srcObject = camStream;
+    scanning = true;
+    scanHistory = [];
+    resetTracking(); // новий сеанс сканування — трекінг починається "з чистого аркуша"
+    document.getElementById('scanPlaceholder').style.display = 'none';
+    document.getElementById('scanLive').classList.add('active');
+    document.getElementById('scanBtn').textContent = I18N[currentLang].scanBtnStop;
+    document.getElementById('scanBtn').classList.add('active');
+    document.getElementById('scanStatus').textContent = I18N[currentLang].statusSearchingAnchors;
+    scanTimer = setInterval(scanFrame, 220);
+  } catch (e) {
+    document.getElementById('scanStatus').textContent = I18N[currentLang].statusCameraError(e.message);
+  }
+}
+
+function stopScan() {
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+  scanning = false;
+  resetTracking(); // камера вимкнена — позиція з попереднього сеансу більше не актуальна
+  document.getElementById('scanBtn').textContent = I18N[currentLang].scanBtnScan;
+  document.getElementById('scanBtn').classList.remove('active');
+  document.getElementById('scanLive').classList.remove('active');
+  document.getElementById('scanPlaceholder').style.display = 'flex';
+  document.getElementById('scanStatus').textContent = '';
+  const dc = document.getElementById('decCanvas');
+  dc.getContext('2d').clearRect(0, 0, dc.width, dc.height);
+}
+
+/* стрілка вниз: гасить камеру і щоразу заново програє друк результату */
+function onDownArrow() {
+  stopScan();
+  playReveal();
+}
+
+/* стрілка вгору: повертає до сканера і скидає друк, щоб наступне розгортання почалось з нуля */
+function onUpArrow() {
+  resetPanel();
+}
+
+function scanFrame() {
+  const video = document.getElementById('camVideo');
+  if (!camStream || video.readyState < 2) return;
+  const dc = document.getElementById('decCanvas');
+  const ctx = dc.getContext('2d');
+
+  /* Відео з камери рідко квадратне (частіше 4:3 чи 16:9), а канвас — завжди
+     квадрат 340×340. Просте розтягування всього кадру в квадрат спотворює
+     геометрію по одній з осей: рівносторонній трикутник якорів перестає
+     бути рівностороннім ще до аналізу, і саме це може бути причиною
+     нестабільного розпізнавання, а не шум.
+     Тому тут вирізаємо центральний квадрат з відео — так само, як CSS
+     `object-fit: cover` робить на самому превью. Завдяки цьому те, що
+     бачить людина на екрані, і те, що аналізує алгоритм, — той самий кадр. */
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+
+  if (vw && vh) {
+    const sSize = Math.min(vw, vh);
+    const sx = (vw - sSize) / 2;
+    const sy = (vh - sSize) / 2;
+    ctx.drawImage(video, sx, sy, sSize, sSize, 0, 0, dc.width, dc.height);
+  } else {
+    // розміри відео ще не готові (рідкісний момент одразу після старту) —
+    // фолбек на старий спосіб, аби не впасти в помилку
+    ctx.drawImage(video, 0, 0, dc.width, dc.height);
+  }
+
+  tryDecode(ctx, dc.width, dc.height);
+}
+
+function tryDecode(ctx, W, H) {
+  const img = ctx.getImageData(0, 0, W, H);
+  const data = img.data;
+
+  // яскравість пікселя (0..255) для будь-якої точки кадру
+  function lum(x, y) {
+    x = Math.round(x); y = Math.round(y);
+    if (x < 0 || x >= W || y < 0 || y >= H) return 255;
+    const i = (y * W + x) * 4;
+    return data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+  }
+
+  // середня яскравість кадру -> поріг "темний/світлий" підлаштовується під освітлення
+  let totalLum = 0;
+  for (let i = 0; i < data.length; i += 32) totalLum += data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114;
+  const avgLum = totalLum / (data.length / 32);
+
+  /* Поріг рахується дзеркально залежно від DISC_POLARITY (див. константу
+     вище файлу): для 'dark' — верхня межа (шукаємо точки темніші за поріг),
+     для 'light' — нижня межа (шукаємо точки світліші за поріг). Формула
+     та сама, просто перевернута навколо середньої яскравості кадру. */
+  const THRESH = DISC_POLARITY === 'light'
+    ? Math.max(140, avgLum * 1.24)
+    : Math.min(115, avgLum * 0.76);
+
+  // "чи ця точка належить елементу диска" — базова перевірка, використовується
+  // при пошуку якорів. Напрямок порівняння залежить від полярності, але
+  // виклик в коді нижче однаковий незалежно від того, яка зараз обрана
+  function isMark(l) {
+    return DISC_POLARITY === 'light' ? l > THRESH : l < THRESH;
+  }
+
+  // той самий поріг, але трохи послаблений (5%) — використовується під час
+  // радіального зчитування бітів, де потрібна більша толерантність до шуму
+  function isMarkLoose(l) {
+    return DISC_POLARITY === 'light' ? l > THRESH * 0.95 : l < THRESH * 1.05;
+  }
+
+  /* ------------------------------------------------------------
+     КРОК 1: пошук плям-міток (потенційних якорів трикутника).
+     Що саме вважається "міткою" — світліше чи темніше за поріг —
+     визначає DISC_POLARITY через isMark() вище.
+     Якщо трекінг активний і пам'ятає позицію з минулого кадру —
+     шукаємо тільки в невеликому квадраті навколо неї (швидше й
+     стабільніше). Інакше — як і раніше, по всьому кадру.
+     ------------------------------------------------------------ */
+  let searchX0 = 6, searchX1 = W - 6;
+  let searchY0 = 6, searchY1 = H - 6;
+
+  if (TRACKING_ENABLED && trackedCenter) {
+    searchX0 = Math.max(6, trackedCenter.x - TRACKING_SEARCH_RADIUS);
+    searchX1 = Math.min(W - 6, trackedCenter.x + TRACKING_SEARCH_RADIUS);
+    searchY0 = Math.max(6, trackedCenter.y - TRACKING_SEARCH_RADIUS);
+    searchY1 = Math.min(H - 6, trackedCenter.y + TRACKING_SEARCH_RADIUS);
+  }
+
+  // буфер перевикористовується між кадрами (див. коментар біля оголошення
+  // visitedBuffer); якщо розмір канваса раптом зміниться — перестворюємо,
+  // інакше просто обнуляємо
+  if (visitedBuffer.length !== W * H) {
+    visitedBuffer = new Uint8Array(W * H);
+  } else {
+    visitedBuffer.fill(0);
+  }
+  const visited = visitedBuffer;
+
+  const markBlobs = [];
+
+  for (let y = searchY0; y < searchY1; y += 4) {
+    for (let x = searchX0; x < searchX1; x += 4) {
+      if (isMark(lum(x, y)) && !visited[y * W + x]) {
+        // flood-fill через масив-чергу з покажчиком-головою замість queue.shift():
+        // shift() зсуває всі елементи масиву на кожен виклик (O(n) на виклик,
+        // O(n²) за весь прохід для великої плями), а простий індекс-покажчик
+        // читає й додає елементи за O(1) — той самий результат, значно швидше
+        const queueX = [x];
+        const queueY = [y];
+        let qHead = 0;
+        let sx = 0, sy = 0, cnt = 0;
+        while (qHead < queueX.length && cnt < 1200) {
+          const cx = queueX[qHead];
+          const cy = queueY[qHead];
+          qHead++;
+          if (cx < 0 || cx >= W || cy < 0 || cy >= H || visited[cy * W + cx] || !isMark(lum(cx, cy))) continue;
+          visited[cy * W + cx] = 1;
+          sx += cx; sy += cy; cnt++;
+          queueX.push(cx + 4, cx - 4, cx, cx);
+          queueY.push(cy, cy, cy + 4, cy - 4);
+        }
+        if (cnt > 6 && cnt < 1200) markBlobs.push({ x: sx / cnt, y: sy / cnt, size: cnt });
+      }
+    }
+  }
+
+  markBlobs.sort((a, b) => b.size - a.size);
+  if (markBlobs.length < 3) {
+    handleTrackingMiss(); // у звуженій зоні нічого не знайшли — рахуємо як "промах" трекінгу
+    document.getElementById('scanStatus').textContent = I18N[currentLang].statusSearchingAnchors;
+    return;
+  }
+
+  /* ------------------------------------------------------------
+     КРОК 2: серед знайдених плям шукаємо трійку, яка формує
+     рівносторонній трикутник потрібного розміру — і одразу
+     відкидаємо ті, що повернуті під кутом, неможливим для книжки
+     (див. EXPECTED_ROTATION_RAD / MAX_ROTATION_DEVIATION_RAD),
+     а також ті, що замалі чи завеликі (див. MIN/MAX_TRIANGLE_SIDE_PX).
+     ------------------------------------------------------------ */
+  const candidates = markBlobs.slice(0, Math.min(9, markBlobs.length));
+  let bestTriangle = null, bestScore = Infinity;
+
+  for (let a = 0; a < candidates.length; a++) {
+    for (let b = a + 1; b < candidates.length; b++) {
+      for (let c = b + 1; c < candidates.length; c++) {
+        const pa = candidates[a], pb = candidates[b], pc = candidates[c];
+        const d1 = dist(pa, pb), d2 = dist(pb, pc), d3 = dist(pa, pc);
+        const avg = (d1 + d2 + d3) / 3;
+        if (avg < MIN_TRIANGLE_SIDE_PX || avg > MAX_TRIANGLE_SIDE_PX) continue;
+        const score = (Math.abs(d1 - avg) + Math.abs(d2 - avg) + Math.abs(d3 - avg)) / avg;
+        if (score >= 0.22) continue;
+
+        // фільтр орієнтації: рахуємо, куди "дивиться" нижній якір цього
+        // конкретного кандидата, і відкидаємо явно неправильний поворот
+        // ще до порівняння скору — так неправильно орієнтований трикутник
+        // ніколи не переможе навіть якщо він геометрично найрівніший
+        const candCx = (pa.x + pb.x + pc.x) / 3;
+        const candCy = (pa.y + pb.y + pc.y) / 3;
+        const candBottom = [pa, pb, pc].reduce((best, p) => p.y > best.y ? p : best);
+        const candRotation = Math.atan2(candBottom.y - candCy, candBottom.x - candCx);
+        const deviation = Math.abs(angleDiffRad(candRotation, EXPECTED_ROTATION_RAD));
+        if (deviation > MAX_ROTATION_DEVIATION_RAD) continue;
+
+        if (score < bestScore) {
+          bestScore = score;
+          bestTriangle = [pa, pb, pc];
+        }
+      }
+    }
+  }
+
+  if (!bestTriangle) {
+    handleTrackingMiss(); // ні одного кандидата з прийнятним поворотом/розміром — теж промах
+    document.getElementById('scanStatus').textContent = I18N[currentLang].statusStabilizing;
+    return;
+  }
+
+  const [pa, pb, pc] = bestTriangle;
+  const cx = (pa.x + pb.x + pc.x) / 3;
+  const cy = (pa.y + pb.y + pc.y) / 3;
+
+  handleTrackingHit(cx, cy); // запам'ятовуємо позицію для звуженого пошуку на наступному кадрі
+
+  const bottomAnchor = [pa, pb, pc].reduce((best, p) => p.y > best.y ? p : best);
+  const baseSide = (dist(pa, pb) + dist(pb, pc) + dist(pa, pc)) / 3;
+  const currentRotation = Math.atan2(bottomAnchor.y - cy, bottomAnchor.x - cx);
+
+  const radarCircleR = baseSide * (116 / 310);
+  const baseCircleR  = baseSide * (75 / 310);
+
+  /* ------------------------------------------------------------
+     КРОК 3: зчитування 12 біт по колу навколо знайденого центру —
+     ця частина не залежить від трекінгу, фільтра кута чи розміру,
+     лишається без змін.
+     ------------------------------------------------------------ */
+  let currentBitCode = 0;
+  const HALF_SECTOR = (15 * Math.PI) / 180;
+
+  for (let i = 0; i < N_DATA; i++) {
+    const angleFromStart = (i / N_DATA) * Math.PI * 2;
+    const globalAngle = currentRotation + angleFromStart + HALF_SECTOR;
+
+    let foundMark = false;
+
+    for (let d = radarCircleR; d >= 6; d -= 2) {
+      const px = cx + Math.cos(globalAngle) * d;
+      const py = cy + Math.sin(globalAngle) * d;
+
+      if (isMarkLoose(lum(px, py))) {
+        let dense = 0;
+        if (isMarkLoose(lum(px+1, py))) dense++;
+        if (isMarkLoose(lum(px-1, py))) dense++;
+        if (isMarkLoose(lum(px, py+1))) dense++;
+        if (isMarkLoose(lum(px, py-1))) dense++;
+
+        if (dense >= 2) {
+          foundMark = true;
+          const bit = d > baseCircleR ? 1 : 0;
+          currentBitCode = (currentBitCode << 1) | bit;
+          break;
+        }
+      }
+    }
+    if (!foundMark) currentBitCode = (currentBitCode << 1) | 0;
+  }
+
+  const finalDbIndex = VALID_CODES.indexOf(currentBitCode);
+  registerReading(finalDbIndex);
+}
+
+function registerReading(idx) {
+  if (idx === -1) {
+    scanHistory = [];
+    document.getElementById('scanStatus').textContent = I18N[currentLang].statusRawNoise;
+    return;
+  }
+
+  if (scanHistory.length && scanHistory[scanHistory.length - 1] === idx) {
+    scanHistory.push(idx);
+  } else {
+    scanHistory = [idx];
+  }
+
+  document.getElementById('scanStatus').textContent = I18N[currentLang].statusCandidate(idx, scanHistory.length, CONFIRM_STREAK);
+
+  if (scanHistory.length >= CONFIRM_STREAK) {
+    finishScan(idx);
+  }
+}
+
+function finishScan(idx) {
+  stopScan();
+  lastScannedIndex = idx;
+  setResultData(idx);
+  document.getElementById('down').checked = true;
+  playReveal();
+}
+
+/* ===== ВИВІД / ДРУКАРСЬКА МАШИНКА ===== */
+
+// регульовані константи: затримка перед друком і швидкість самого друку
+const TYPE_DELAY_MS = 3000; // скільки курсор просто блимає перед стартом поля
+const TYPE_SPEED_MS = 40;   // мс на кожен символ під час друку
+
+let currentData = null;
+let revealToken = 0; // будь-яке скидання інвалідує старі анімації, що ще "тікають"
+
+function setEmptyData() {
+  const t = I18N[currentLang];
+  currentData = {
+    number: t.emptyNumber,
+    status: t.emptyStatus,
+    output: t.emptyOutput
+  };
+}
+
+function setResultData(idx) {
+  const t = I18N[currentLang];
+  const phrase = t.db[idx];
+  // номер валідний (диск реально існує в системі кодів) — тому статус
+  // завжди "розпізнано". Різниться лише сам текст виводу: якщо для
+  // цього номера ще немає прив'язаної фрази в базі, попереджаємо про це
+  // прямим текстом замість того, щоб видавати номер за "невідомий код"
+  currentData = {
+    number: idx,
+    status: t.statusRecognized,
+    output: phrase || t.outputUnknownCode
+  };
+}
+
+function renderPanel() {
+  const t = I18N[currentLang];
+  document.getElementById('resultBox').innerHTML = `
+    <div class="result-panel">
+      <div class="field">
+        <span class="field-label">${t.fieldNumber}</span>
+        <span class="field-value" id="numberText"></span><span class="type-cursor idle" id="numberCursor">▍</span>
+      </div>
+      <div class="field">
+        <span class="field-label">${t.fieldStatus}</span>
+        <span class="field-value" id="statusText"></span><span class="type-cursor idle" id="statusCursor">▍</span>
+      </div>
+      <div class="field field-output">
+        <span class="field-label">${t.fieldOutput}</span>
+        <span class="field-value" id="outputText"></span><span class="type-cursor idle" id="outputCursor">▍</span>
+      </div>
+    </div>
+  `;
+}
+
+/* друкує текст по символу; myToken звіряється з revealToken, щоб обірватись, якщо панель скинули */
+function typeInto(elId, cursorId, text, speed, myToken) {
+  return new Promise((resolve) => {
+    const el = document.getElementById(elId);
+    const cursor = document.getElementById(cursorId);
+    if (!el) { resolve(); return; }
+    let i = 0;
+    const timer = setInterval(() => {
+      if (myToken !== revealToken) { clearInterval(timer); resolve(); return; }
+      el.textContent += text[i];
+      i++;
+      if (i >= text.length) {
+        clearInterval(timer);
+        if (cursor) cursor.classList.add('done');
+        resolve();
+      }
+    }, speed);
+  });
+}
+
+function pause(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/* повністю очищає панель і "гасить" будь-яку анімацію, що триває — наступне розгортання почне друк з нуля */
+function resetPanel() {
+  revealToken++;
+  document.getElementById('resultBox').innerHTML = '';
+}
+
+/* універсальна пауза з блимаючим курсором перед друком, однакова для будь-якого поля.
+   курсор "перескакує" сюди (idle знімається) тільки коли починається саме це поле */
+async function revealField(elId, cursorId, text, myToken, delay = TYPE_DELAY_MS, speed = TYPE_SPEED_MS) {
+  const cursor = document.getElementById(cursorId);
+  if (cursor) cursor.classList.remove('idle');
+
+  await pause(delay);
+  if (myToken !== revealToken) return;
+
+  await typeInto(elId, cursorId, text, speed, myToken);
+}
+
+/* послідовний друк: кожне поле — 3с блимання курсора, потім друк тексту */
+async function playReveal() {
+  if (!currentData) return;
+  const myToken = ++revealToken;
+  renderPanel();
+
+  const fields = [
+    ['numberText', 'numberCursor', String(currentData.number)],
+    ['statusText', 'statusCursor', currentData.status],
+    ['outputText', 'outputCursor', currentData.output]
+  ];
+
+  for (const [elId, cursorId, text] of fields) {
+    await revealField(elId, cursorId, text, myToken);
+    if (myToken !== revealToken) return;
+  }
+}
+
+setEmptyData();
+
+function dist(a, b) { return Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2); }
+</script>
+
+</body>
+</html>
