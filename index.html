@@ -466,6 +466,17 @@ let camStream = null, scanTimer = null, scanning = false;
 let scanHistory = [];
 const CONFIRM_STREAK = 3; // скільки однакових зчитувань підряд треба для фіксації
 
+/* Невидимий канвас для аналізу пікселів — окремо від видимого decCanvas.
+   Раніше відео малювалось прямо на decCanvas, який водночас лежить
+   поверх <video> (z-index: 2). Через це користувач бачив не плавне
+   нативне відео, а дублікат-знімок, що оновлюється раз на 220мс —
+   звідси відчуття "дерганого" кадру. Тепер аналіз відбувається тут,
+   у пам'яті, а видиме нативне відео більше нічим не перекривається. */
+const analysisCanvas = document.createElement('canvas');
+analysisCanvas.width = 340;
+analysisCanvas.height = 340;
+const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true });
+
 /* Буфер "відвіданих" пікселів для flood-fill у tryDecode. Раніше створювався
    заново (new Uint8Array(W*H)) на кожному кадрі — це ~115КБ виділення пам'яті
    4.5 рази на секунду, зайве навантаження на збирач сміття, особливо помітне
@@ -524,7 +535,7 @@ const MAX_TRIANGLE_SIDE_PX = 300; // ~88% від розміру канвасу (
    зміниться: THRESH, isMark() та isMarkLoose() нижче автоматично
    підлаштовуються під обране значення.
    ================================================================ */
-const DISC_POLARITY = 'dark';
+const DISC_POLARITY = 'light';
 
 /* ================================================================
    ТРЕКІНГ КАДРУ (експериментально, вимкнено за замовчуванням)
@@ -637,8 +648,6 @@ function onUpArrow() {
 function scanFrame() {
   const video = document.getElementById('camVideo');
   if (!camStream || video.readyState < 2) return;
-  const dc = document.getElementById('decCanvas');
-  const ctx = dc.getContext('2d');
 
   /* Відео з камери рідко квадратне (частіше 4:3 чи 16:9), а канвас — завжди
      квадрат 340×340. Просте розтягування всього кадру в квадрат спотворює
@@ -655,17 +664,23 @@ function scanFrame() {
     const sSize = Math.min(vw, vh);
     const sx = (vw - sSize) / 2;
     const sy = (vh - sSize) / 2;
-    ctx.drawImage(video, sx, sy, sSize, sSize, 0, 0, dc.width, dc.height);
+    analysisCtx.drawImage(video, sx, sy, sSize, sSize, 0, 0, analysisCanvas.width, analysisCanvas.height);
   } else {
     // розміри відео ще не готові (рідкісний момент одразу після старту) —
     // фолбек на старий спосіб, аби не впасти в помилку
-    ctx.drawImage(video, 0, 0, dc.width, dc.height);
+    analysisCtx.drawImage(video, 0, 0, analysisCanvas.width, analysisCanvas.height);
   }
 
-  tryDecode(ctx, dc.width, dc.height);
+  // видимий канвас — лише прозорий оверлей для трикутника-якоря нижче,
+  // саме відео під ним лишається нативним і плавним
+  const dc = document.getElementById('decCanvas');
+  const displayCtx = dc.getContext('2d');
+  displayCtx.clearRect(0, 0, dc.width, dc.height);
+
+  tryDecode(analysisCtx, analysisCanvas.width, analysisCanvas.height, displayCtx);
 }
 
-function tryDecode(ctx, W, H) {
+function tryDecode(ctx, W, H, displayCtx) {
   const img = ctx.getImageData(0, 0, W, H);
   const data = img.data;
 
@@ -824,10 +839,24 @@ function tryDecode(ctx, W, H) {
   const radarCircleR = baseSide * (116 / 310);
   const baseCircleR  = baseSide * (75 / 310);
 
+  // трикутник-якір на видимому прозорому оверлеї — суто візуальний фідбек,
+  // на саму детекцію ніяк не впливає, малюється поверх нативного відео
+  if (displayCtx) {
+    displayCtx.strokeStyle = 'rgba(0, 150, 255, 0.5)';
+    displayCtx.lineWidth = 1.5;
+    displayCtx.beginPath();
+    displayCtx.moveTo(pa.x, pa.y);
+    displayCtx.lineTo(pb.x, pb.y);
+    displayCtx.lineTo(pc.x, pc.y);
+    displayCtx.closePath();
+    displayCtx.stroke();
+  }
+
   /* ------------------------------------------------------------
      КРОК 3: зчитування 12 біт по колу навколо знайденого центру —
      ця частина не залежить від трекінгу, фільтра кута чи розміру,
-     лишається без змін.
+     лишається без змін. Кольорова крапка на кожен біт малюється тільки
+     для візуального фідбека (displayCtx), на сам код біта не впливає.
      ------------------------------------------------------------ */
   let currentBitCode = 0;
   const HALF_SECTOR = (15 * Math.PI) / 180;
@@ -837,6 +866,7 @@ function tryDecode(ctx, W, H) {
     const globalAngle = currentRotation + angleFromStart + HALF_SECTOR;
 
     let foundMark = false;
+    let edgeX = cx, edgeY = cy;
 
     for (let d = radarCircleR; d >= 6; d -= 2) {
       const px = cx + Math.cos(globalAngle) * d;
@@ -851,6 +881,7 @@ function tryDecode(ctx, W, H) {
 
         if (dense >= 2) {
           foundMark = true;
+          edgeX = px; edgeY = py;
           const bit = d > baseCircleR ? 1 : 0;
           currentBitCode = (currentBitCode << 1) | bit;
           break;
@@ -858,6 +889,13 @@ function tryDecode(ctx, W, H) {
       }
     }
     if (!foundMark) currentBitCode = (currentBitCode << 1) | 0;
+
+    if (displayCtx) {
+      displayCtx.fillStyle = ((currentBitCode & 1) === 1) ? '#ff3333' : '#33ff33';
+      displayCtx.beginPath();
+      displayCtx.arc(edgeX, edgeY, 4, 0, Math.PI * 2);
+      displayCtx.fill();
+    }
   }
 
   const finalDbIndex = VALID_CODES.indexOf(currentBitCode);
