@@ -364,6 +364,7 @@ const I18N = {
     scanBtnStop: 'Завершити',
     statusSearchingAnchors: 'Пошук якорів...',
     statusStabilizing: 'Стабілізація геометрії...',
+    statusTooClose: 'Занадто близько — трохи відсунь',
     statusRawNoise: 'Сирий шум, шукаю патерн...',
     statusCandidate: (idx, cur, total) => `Кандидат #${idx} (${cur}/${total})`,
     statusCameraError: (msg) => `Помилка камери: ${msg}`,
@@ -381,6 +382,7 @@ const I18N = {
     scanBtnStop: 'Stop',
     statusSearchingAnchors: 'Searching anchors...',
     statusStabilizing: 'Stabilizing geometry...',
+    statusTooClose: "Too close — move back a bit",
     statusRawNoise: 'Raw noise, seeking pattern...',
     statusCandidate: (idx, cur, total) => `Candidate #${idx} (${cur}/${total})`,
     statusCameraError: (msg) => `Camera error: ${msg}`,
@@ -545,6 +547,34 @@ const MAX_ROTATION_DEVIATION_DEG = 40;
 const MAX_ROTATION_DEVIATION_RAD = (MAX_ROTATION_DEVIATION_DEG * Math.PI) / 180;
 
 /* ================================================================
+   ФОРМА ТРИКУТНИКА: перевірка реальних внутрішніх кутів
+   Перевірка довжин сторін (score вище) рахує СУКУПНЕ відхилення —
+   одна сторона може бути помітно коротшою, інша довшою, і поки третя
+   компенсує суму, кандидат все одно проходить поріг. Це дозволяє
+   геометрично неможливим для рівностороннього трикутника формам
+   (наприклад, кутам білого прямокутного об'єкта в кадрі) випадково
+   пройти перевірку сторін. Тому рахуємо кожен внутрішній кут окремо
+   через теорему косинусів і відкидаємо кандидата, якщо хоч один кут
+   надто далеко від 60° — незалежно від того, як виглядає сума сторін.
+   ================================================================ */
+const MAX_ANGLE_DEVIATION_DEG = 22; // допустиме відхилення кожного кута від 60° (легко підкрутити)
+
+/* повертає найбільше відхилення (в градусах) серед трьох внутрішніх
+   кутів трикутника від ідеальних 60°. a, b, c — довжини сторін навпроти
+   відповідних вершин (ті самі d1/d2/d3, що вже пораховані для score,
+   тут не дублюємо dist() — просто передаємо готові значення) */
+function maxAngleDeviation(a, b, c) {
+  function angleAt(opposite, s1, s2) {
+    const cosVal = (s1 * s1 + s2 * s2 - opposite * opposite) / (2 * s1 * s2);
+    return Math.acos(Math.max(-1, Math.min(1, cosVal))) * 180 / Math.PI;
+  }
+  const angleA = angleAt(a, b, c);
+  const angleB = angleAt(b, a, c);
+  const angleC = angleAt(c, a, b);
+  return Math.max(Math.abs(angleA - 60), Math.abs(angleB - 60), Math.abs(angleC - 60));
+}
+
+/* ================================================================
    РОЗМІР ТРИКУТНИКА: нижня і верхня межа
    Нижня межа (MIN) вже була в коді як "avg < 40" — відсіює випадковий
    дрібний шум, що ніколи не утворить трикутник такого розміру, як
@@ -672,7 +702,7 @@ function drawFocusTriangle(displayCtx, W, H) {
   vertices.forEach((p, i) => {
     const alpha = Math.max(0, Math.min(1, ringProgress - i));
     if (alpha <= 0.01) return;
-    displayCtx.fillStyle = `rgba(190, 188, 182, ${alpha})`;
+    displayCtx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
     displayCtx.beginPath();
     displayCtx.arc(p.x, p.y, ANCHOR_DOT_RADIUS_PX, 0, Math.PI * 2);
     displayCtx.fill();
@@ -866,10 +896,14 @@ function tryDecode(ctx, W, H) {
      рівносторонній трикутник потрібного розміру — і одразу
      відкидаємо ті, що повернуті під кутом, неможливим для книжки
      (див. EXPECTED_ROTATION_RAD / MAX_ROTATION_DEVIATION_RAD),
-     а також ті, що замалі чи завеликі (див. MIN/MAX_TRIANGLE_SIDE_PX).
+     ті, що замалі чи завеликі (див. MIN/MAX_TRIANGLE_SIDE_PX),
+     і ті, чия форма геометрично неможлива для рівностороннього
+     трикутника навіть якщо сукупний score сторін це не показав
+     (див. MAX_ANGLE_DEVIATION_DEG).
      ------------------------------------------------------------ */
   const candidates = markBlobs.slice(0, Math.min(9, markBlobs.length));
   let bestTriangle = null, bestScore = Infinity;
+  let sawOversizedCandidate = false; // хоч один кандидат був більшим за MAX — ознака "занадто близько"
 
   for (let a = 0; a < candidates.length; a++) {
     for (let b = a + 1; b < candidates.length; b++) {
@@ -877,9 +911,15 @@ function tryDecode(ctx, W, H) {
         const pa = candidates[a], pb = candidates[b], pc = candidates[c];
         const d1 = dist(pa, pb), d2 = dist(pb, pc), d3 = dist(pa, pc);
         const avg = (d1 + d2 + d3) / 3;
-        if (avg < MIN_TRIANGLE_SIDE_PX || avg > MAX_TRIANGLE_SIDE_PX) continue;
+        if (avg > MAX_TRIANGLE_SIDE_PX) { sawOversizedCandidate = true; continue; }
+        if (avg < MIN_TRIANGLE_SIDE_PX) continue;
         const score = (Math.abs(d1 - avg) + Math.abs(d2 - avg) + Math.abs(d3 - avg)) / avg;
         if (score >= 0.22) continue;
+
+        // фільтр форми: сукупний score вище міг пропустити кандидата, де
+        // одна сторона коротша, інша довша, а сума "виглядає нормальною" —
+        // тут перевіряємо кожен внутрішній кут окремо, суворіше й чесніше
+        if (maxAngleDeviation(d1, d2, d3) > MAX_ANGLE_DEVIATION_DEG) continue;
 
         // фільтр орієнтації: рахуємо, куди "дивиться" нижній якір цього
         // конкретного кандидата, і відкидаємо явно неправильний поворот
@@ -903,7 +943,12 @@ function tryDecode(ctx, W, H) {
   if (!bestTriangle) {
     handleTrackingMiss(); // ні одного кандидата з прийнятним поворотом/розміром — теж промах
     lastTriangle = null;
-    document.getElementById('scanStatus').textContent = I18N[currentLang].statusStabilizing;
+    // якщо жодного кандидата прийнятного розміру не було саме через
+    // "завеликий" — це майже напевно означає, що диск затулив увесь
+    // кадр, а не звичайний шум. Кажемо про це прямо, а не загальною фразою
+    document.getElementById('scanStatus').textContent = sawOversizedCandidate
+      ? I18N[currentLang].statusTooClose
+      : I18N[currentLang].statusStabilizing;
     return;
   }
 
