@@ -508,6 +508,8 @@ let lastTriangle = null;       // [pa, pb, pc] або null, якщо зараз 
 let targetRingProgress = 0;    // куди прямує анімація (ціле число підтверджень)
 let ringProgress = 0;          // поточне плавне значення, яке реально малюється
 const RING_EASE = 0.18;        // швидкість "доганяння" — більше = різкіше, менше = плавніше
+const RING_1_INSET_PX = 12;    // відступ першої внутрішньої рамки від кожної сторони, px
+const RING_2_INSET_PX = 24;    // відступ другої, найглибшої рамки від кожної сторони, px
 let overlayAnimFrame = null;   // id requestAnimationFrame, щоб можна було зупинити цикл
 
 /* Розпізнавання (CONFIRM_STREAK підтверджень підряд) може статись за
@@ -641,36 +643,89 @@ function toggleScan(btn) {
    прогрес переходить позначку 1, друга — позначку 2. Кожна масштабується
    до центроїда трикутника, а не малюється паралельними лініями — це
    зберігає форму реального трикутника якорів на будь-якому диску. */
+/* Обчислює точку перетину двох прямих, кожна задана двома точками.
+   Використовується для побудови внутрішнього трикутника з рівним
+   відступом від кожної сторони (а не просто масштабованої копії). */
+function lineIntersect(a1, a2, b1, b2) {
+  const adx = a2.x - a1.x, ady = a2.y - a1.y;
+  const bdx = b2.x - b1.x, bdy = b2.y - b1.y;
+  const denom = adx * bdy - ady * bdx;
+  if (Math.abs(denom) < 1e-6) return { x: (a1.x + a2.x) / 2, y: (a1.y + a2.y) / 2 }; // паралельні — fallback
+  const t = ((b1.x - a1.x) * bdy - (b1.y - a1.y) * bdx) / denom;
+  return { x: a1.x + adx * t, y: a1.y + ady * t };
+}
+
+/* Зсуває відрізок p1-p2 на dist пікселів усередину трикутника (у бік
+   centroid), повертає дві точки зсунутої лінії. */
+function offsetEdgeInward(p1, p2, centroid, dist) {
+  const ex = p2.x - p1.x, ey = p2.y - p1.y;
+  const len = Math.hypot(ex, ey) || 1;
+  let nx = -ey / len, ny = ex / len;
+  const midx = (p1.x + p2.x) / 2, midy = (p1.y + p2.y) / 2;
+  // якщо нормаль дивиться від центра — розвертаємо її досередини
+  if ((centroid.x - midx) * nx + (centroid.y - midy) * ny < 0) { nx = -nx; ny = -ny; }
+  return {
+    p1: { x: p1.x + nx * dist, y: p1.y + ny * dist },
+    p2: { x: p2.x + nx * dist, y: p2.y + ny * dist }
+  };
+}
+
+/* Будує внутрішній трикутник, кожна сторона якого зсунута рівно на
+   dist пікселів усередину від відповідної сторони оригіналу —
+   на відміну від масштабування до центроїда, тут відступ від КОЖНОЇ
+   сторони буде однаковим навіть якщо трикутник не ідеально рівносторонній. */
+function insetTriangle(points, dist) {
+  const centroid = {
+    x: (points[0].x + points[1].x + points[2].x) / 3,
+    y: (points[0].y + points[1].y + points[2].y) / 3
+  };
+  const e0 = offsetEdgeInward(points[0], points[1], centroid, dist);
+  const e1 = offsetEdgeInward(points[1], points[2], centroid, dist);
+  const e2 = offsetEdgeInward(points[2], points[0], centroid, dist);
+
+  return [
+    lineIntersect(e2.p1, e2.p2, e0.p1, e0.p2),
+    lineIntersect(e0.p1, e0.p2, e1.p1, e1.p2),
+    lineIntersect(e1.p1, e1.p2, e2.p1, e2.p2)
+  ];
+}
+
 function drawFocusTriangle(displayCtx, W, H) {
   displayCtx.clearRect(0, 0, W, H);
   if (!lastTriangle) return;
 
   const [pa, pb, pc] = lastTriangle;
-  const cx = (pa.x + pb.x + pc.x) / 3;
-  const cy = (pa.y + pb.y + pc.y) / 3;
 
-  function strokeScaled(scale, alpha, width) {
+  function strokePolygon(points, alpha, width) {
     if (alpha <= 0.01) return;
     displayCtx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
     displayCtx.lineWidth = width;
     displayCtx.beginPath();
-    [pa, pb, pc].forEach((p, i) => {
-      const x = cx + (p.x - cx) * scale;
-      const y = cy + (p.y - cy) * scale;
-      if (i === 0) displayCtx.moveTo(x, y); else displayCtx.lineTo(x, y);
+    points.forEach((p, i) => {
+      if (i === 0) displayCtx.moveTo(p.x, p.y); else displayCtx.lineTo(p.x, p.y);
     });
     displayCtx.closePath();
     displayCtx.stroke();
   }
 
   // зовнішній контур — завжди на повну яскравість, товщий бордер
-  strokeScaled(1, 0.6, 3);
+  strokePolygon([pa, pb, pc], 0.6, 3);
 
-  // перша внутрішня рамка з'являється між 0 і 1 підтвердженням
-  strokeScaled(0.82, Math.min(1, ringProgress), 2);
+  // перша внутрішня рамка — рівно RING_1_INSET_PX від кожної сторони,
+  // з'являється між 0 і 1 підтвердженням
+  strokePolygon(
+    insetTriangle([pa, pb, pc], RING_1_INSET_PX),
+    Math.min(1, ringProgress),
+    2
+  );
 
-  // друга, найглибша — між 1 і 2 підтвердженнями
-  strokeScaled(0.64, Math.max(0, Math.min(1, ringProgress - 1)), 2);
+  // друга, найглибша — рівно RING_2_INSET_PX від кожної сторони,
+  // з'являється між 1 і 2 підтвердженнями
+  strokePolygon(
+    insetTriangle([pa, pb, pc], RING_2_INSET_PX),
+    Math.max(0, Math.min(1, ringProgress - 1)),
+    2
+  );
 }
 
 /* Окремий цикл на requestAnimationFrame (~60 разів/сек) — плавно доганяє
