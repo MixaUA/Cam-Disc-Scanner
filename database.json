@@ -1,0 +1,52 @@
+{
+  "fallbacks": {
+    "empty_state": {
+      "uk": {
+        "number": "не знайдено",
+        "status": "очікую",
+        "output": "відскануй знайдене креслення і дізнайся його можливості. Уважно прочитай характеристики перед застосуванням."
+      },
+      "en": {
+        "number": "not found",
+        "status": "waiting",
+        "output": "scan the cam disc you've found to reveal what it can do. Read its properties carefully before use."
+      }
+    },
+    "unknown_code": {
+      "uk": {
+        "status": "не розпізнано",
+        "output": "можливості цього креслення не розпізнані. Не рекомендується до застосування."
+      },
+      "en": {
+        "status": "unidentified",
+        "output": "this drawing's capabilities have not been identified. Not recommended for use."
+      }
+    }
+  },
+  "discs": {
+    "6": {
+      "uk": {
+        "name": "Сила",
+        "pros": "Подолання перешкод, рух напролом, можливість підіймати більшу вагу.",
+        "cons": "Потребує більше енергії, зменшує автономність, незграбність, грубість у спілкуванні."
+      },
+      "en": {
+        "name": "Strength",
+        "pros": "Overcoming obstacles, pushing through, ability to lift heavier weights.",
+        "cons": "Requires more energy, reduces autonomy, clumsiness, bluntness in communication."
+      }
+    },
+    "8": {
+      "uk": {
+        "name": "Кмітливість",
+        "pros": "Швидке вирішення проблем, адаптація до змін, несподівані рішення, ефективність.",
+        "cons": "Схильність до хитрощів, іноді нехтування емоціями, надмірний аналіз, нетерплячість."
+      },
+      "en": {
+        "name": "Cleverness",
+        "pros": "Quick problem-solving, adapting to change, unexpected solutions, efficiency.",
+        "cons": "Tendency to cunning, sometimes neglecting emotions, over-analysis, impatience."
+      }
+    }
+  }
+}
