@@ -510,6 +510,19 @@ let ringProgress = 0;          // поточне плавне значення, 
 const RING_EASE = 0.18;        // швидкість "доганяння" — більше = різкіше, менше = плавніше
 let overlayAnimFrame = null;   // id requestAnimationFrame, щоб можна було зупинити цикл
 
+/* Розпізнавання (CONFIRM_STREAK підтверджень підряд) може статись за
+   лічені кадри — надто швидко, щоб анімація рамок встигла візуально
+   "доскочити" до 3/3 перед тим, як екран перемикається на вивід. Тому
+   логічне підтвердження і фактичний перехід до результату розведені:
+   коли scanHistory досягає CONFIRM_STREAK, ми чекаємо ще LOCK_HOLD_MS
+   (з увімкненим прапорцем locking, щоб не плодити повторні таймери),
+   і тільки тоді викликаємо finishScan(). Весь цей час targetRingProgress
+   лишається на максимумі, тож рамки встигають плавно "зімкнутись" і
+   на мить затриматись у зімкнутому стані — саме цей момент і мав бути
+   видно дитині, а не миттєвий стрибок одразу в текст. */
+const LOCK_HOLD_MS = 550;
+let locking = false;
+
 
 /* ================================================================
    ОРІЄНТАЦІЯ ДИСКА: обмеження кута повороту
@@ -638,7 +651,7 @@ function drawFocusTriangle(displayCtx, W, H) {
 
   function strokeScaled(scale, alpha, width) {
     if (alpha <= 0.01) return;
-    displayCtx.strokeStyle = `rgba(0, 150, 255, ${alpha})`;
+    displayCtx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
     displayCtx.lineWidth = width;
     displayCtx.beginPath();
     [pa, pb, pc].forEach((p, i) => {
@@ -690,6 +703,7 @@ async function startScan() {
     lastTriangle = null;
     targetRingProgress = 0;
     ringProgress = 0;
+    locking = false;
     document.getElementById('scanPlaceholder').style.display = 'none';
     document.getElementById('scanLive').classList.add('active');
     document.getElementById('scanBtn').textContent = I18N[currentLang].scanBtnStop;
@@ -712,6 +726,7 @@ function stopScan() {
   lastTriangle = null;
   targetRingProgress = 0;
   ringProgress = 0;
+  locking = false;
   document.getElementById('scanBtn').textContent = I18N[currentLang].scanBtnScan;
   document.getElementById('scanBtn').classList.remove('active');
   document.getElementById('scanLive').classList.remove('active');
@@ -936,6 +951,8 @@ function tryDecode(ctx, W, H) {
 }
 
 function registerReading(idx) {
+  if (locking) return; // вже підтверджено й чекаємо на LOCK_HOLD_MS — нові кадри ігноруємо
+
   if (idx === -1) {
     scanHistory = [];
     targetRingProgress = 0; // шум — анімація фокусу плавно згасає назад до нуля
@@ -952,8 +969,9 @@ function registerReading(idx) {
   targetRingProgress = Math.min(scanHistory.length, CONFIRM_STREAK);
   document.getElementById('scanStatus').textContent = I18N[currentLang].statusCandidate(idx, scanHistory.length, CONFIRM_STREAK);
 
-  if (scanHistory.length >= CONFIRM_STREAK) {
-    finishScan(idx);
+  if (scanHistory.length >= CONFIRM_STREAK && !locking) {
+    locking = true; // тримаємо рамки "зімкнутими" ще трохи, перш ніж перемкнути екран
+    setTimeout(() => finishScan(idx), LOCK_HOLD_MS);
   }
 }
 
