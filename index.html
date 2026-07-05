@@ -17,80 +17,152 @@ body {
   display: grid;
   place-items: center;
   background: #0b3d63;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-  background-size: 24px 24px;
   font-family: sans-serif;
   color: #fff;
   padding: 12px;
 }
 
-input { display: none; }
+/* ===== АКОРДЕОН З ОКОМ ===== */
 
-.frame {
+.accordion-container {
   width: min(460px, 92vw);
-  display: flex;
-  flex-direction: column;
+  min-height: 460px;
+  background-color: #0b3d63;
+  position: relative;
+  display: grid;
+  /* старт: верхній рядок (результат) згорнутий, роздільник фіксований, низ (сканер) займає решту */
+  grid-template-rows: 0fr auto 1fr;
+  transition: grid-template-rows 2.2s cubic-bezier(0.77, 0, 0.175, 1);
 }
 
-.top, .bottom {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+.content-area {
   overflow: hidden;
-  transition: max-height 0.5s ease, opacity 0.4s ease;
-  gap: 14px;
+  box-sizing: border-box;
+  padding: 0 6px;
+  color: #fff;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 2.2s cubic-bezier(0.77, 0, 0.175, 1);
 }
 
-.handle {
+.content-inner {
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  user-select: none;
+  gap: 22px;
+}
+
+.top-content { grid-template-rows: 0fr; }
+.bottom-content { grid-template-rows: 1fr; }
+
+/* запас знизу під панеллю результату — щоб довгий текст фізично не міг
+   доторкнутись до зони стрілки "вгору" в роздільнику під ним */
+.top-content .content-inner {
+  padding-bottom: 24px;
+}
+
+/* стрілка вниз натиснута (вручну або після успішного розпізнавання) */
+.accordion-container.state-down {
+  grid-template-rows: 1fr auto 0fr;
+}
+.accordion-container.state-down .top-content { grid-template-rows: 1fr; }
+.accordion-container.state-down .bottom-content { grid-template-rows: 0fr; }
+
+.divider-wrapper {
   width: 100%;
-  flex-shrink: 0;
-  height: 60px;
-  margin: 30px 0;
+  max-width: 320px;
+  height: 120px;
+  margin: 0 auto 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  z-index: 10;
 }
 
 .line {
-  width: 60%;
+  flex-grow: 1;
   height: 2px;
-  background: #fff;
-  margin: 4px 0;
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+.eye-box {
+  width: 130px;
+  height: 90px;
+  position: relative;
   flex-shrink: 0;
 }
 
-.arrow {
-  font-size: 18px;
-  line-height: 1;
+.eye-box svg {
+  width: 100%;
+  height: 100%;
+}
+
+.eye-outline, .eyelid, .arrow-btn {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.eyelid {
+  fill: #0b3d63;
+  transform: translateY(0%);
+  transition: transform 2.2s cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+.pupil {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 16;
+}
+
+.arrow-container {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 30px;
+  height: 20px;
   cursor: pointer;
-  padding: 6px 10px;
-  color: #fff;
-  flex-shrink: 0;
+  z-index: 11;
 }
 
-/* старт: брова вгорі (top закритий), сканер (bottom) відкрито */
-#up:checked ~ .frame .top {
-  max-height: 0;
+.arrow-top {
+  top: 0;
   opacity: 0;
-}
-#up:checked ~ .frame .bottom {
-  max-height: 480px;
-  opacity: 1;
+  visibility: hidden;
+  transition: opacity 0.4s ease 0s, visibility 0.4s ease 0s;
 }
 
-/* брова опускається: розпирає top (результат) вниз своїм вмістом, ховає bottom (сканер) */
-#down:checked ~ .frame .top {
-  max-height: 3000px; /* достатньо для довгого опису кулачка */
+.arrow-bottom {
+  bottom: 0;
   opacity: 1;
+  visibility: visible;
+  transition: opacity 0.4s ease 2.2s, visibility 0.4s ease 2.2s;
 }
-#down:checked ~ .frame .bottom {
-  max-height: 0;
+
+.arrow-btn {
+  fill: #0b3d63;
+  transition: fill 0.2s;
+}
+.arrow-container:hover .arrow-btn {
+  fill: rgba(255, 255, 255, 0.2);
+}
+
+.accordion-container.state-down .eyelid {
+  transform: translateY(-155%);
+}
+
+.accordion-container.state-down .arrow-bottom {
   opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.4s ease 0s, visibility 0.4s ease 0s;
+}
+.accordion-container.state-down .arrow-top {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.4s ease 2.2s, visibility 0.4s ease 2.2s;
 }
 
 /* ===== СКАНЕР ===== */
@@ -113,7 +185,7 @@ input { display: none; }
 }
 
 .scan-placeholder {
-  border: 1px solid rgba(255,255,255,0.5);
+  border: 2px solid rgba(255,255,255,0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -160,7 +232,7 @@ video {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border: 1px solid rgba(255,255,255,0.4);
+  border: 2px solid rgba(255,255,255,0.4);
   z-index: 1;
 }
 
@@ -197,7 +269,7 @@ video {
   font-family: sans-serif;
   letter-spacing: 0.05em;
   border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.6);
+  border: 2px solid rgba(255,255,255,0.6);
   background: transparent;
   color: #fff;
   cursor: pointer;
@@ -274,7 +346,7 @@ video {
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,0.85);
+  border: 2px solid rgba(255,255,255,0.85);
   background: transparent;
   color: #fff;
   font-family: monospace;
@@ -313,44 +385,74 @@ video {
 </head>
 <body>
 
-<input type="radio" name="m" id="up" checked>
-<input type="radio" name="m" id="down">
-
 <button class="lang-toggle" id="langToggle" onclick="toggleLang(this)">UA</button>
 
-<div class="frame">
+<div class="accordion-container" id="accordion">
 
-  <div class="top" id="resultBox"></div>
-
-  <div class="handle">
-    <label for="up" class="arrow" onclick="onUpArrow()">▲</label>
-    <div class="line"></div>
-    <label for="down" class="arrow" onclick="onDownArrow()">▼</label>
+  <div class="content-area top-content">
+    <div class="content-inner" id="resultBox"></div>
   </div>
 
-  <div class="bottom">
-    <div class="scan-overlay">
-      <div class="scan-placeholder" id="scanPlaceholder">
-        <span class="corner tl"></span>
-        <span class="corner tr"></span>
-        <span class="corner bl"></span>
-        <span class="corner br"></span>
-        <svg class="placeholder-triangle" viewBox="0 0 200 180">
-          <polygon points="100,165 15,15 185,15" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2" stroke-dasharray="7 7"/>
-          <circle cx="100" cy="165" r="3" fill="rgba(255,255,255,0.6)"/>
-          <circle cx="15" cy="15" r="3" fill="rgba(255,255,255,0.6)"/>
-          <circle cx="185" cy="15" r="3" fill="rgba(255,255,255,0.6)"/>
-        </svg>
-        <div class="placeholder-label" id="placeholderLabel">Кулачковий сканер</div>
-      </div>
-      <div class="scan-live" id="scanLive">
-        <video id="camVideo" autoplay playsinline muted></video>
-        <canvas id="decCanvas" width="340" height="340"></canvas>
-        <div class="scan-line"></div>
-      </div>
+  <div class="divider-wrapper">
+
+    <div class="arrow-container arrow-top" id="btn-up" onclick="onUpArrow()">
+      <svg viewBox="0 0 40 20">
+        <polygon points="20,2 2,18 38,18" class="arrow-btn"/>
+      </svg>
     </div>
-    <button class="scan-btn" id="scanBtn" onclick="toggleScan(this)">Сканувати</button>
-    <div class="scan-status" id="scanStatus"></div>
+
+    <div class="line"></div>
+
+    <div class="eye-box">
+      <svg viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <clipPath id="blueprint-clip">
+            <path d="M 20 100 Q 150 10, 280 100 Q 150 190, 20 100 Z" />
+          </clipPath>
+        </defs>
+        <g clip-path="url(#blueprint-clip)">
+          <circle cx="150" cy="100" r="24" class="pupil" />
+          <path d="M 20 100 Q 150 -40, 280 100 L 280 350 L 20 350 Z" class="eyelid" />
+        </g>
+        <path d="M 20 100 Q 150 10, 280 100 Q 150 190, 20 100 Z" class="eye-outline" />
+      </svg>
+    </div>
+
+    <div class="line"></div>
+
+    <div class="arrow-container arrow-bottom" id="btn-down" onclick="onDownArrow()">
+      <svg viewBox="0 0 40 20">
+        <polygon points="2,2 38,2 20,18" class="arrow-btn"/>
+      </svg>
+    </div>
+
+  </div>
+
+  <div class="content-area bottom-content">
+    <div class="content-inner">
+      <div class="scan-overlay">
+        <div class="scan-placeholder" id="scanPlaceholder">
+          <span class="corner tl"></span>
+          <span class="corner tr"></span>
+          <span class="corner bl"></span>
+          <span class="corner br"></span>
+          <svg class="placeholder-triangle" viewBox="0 0 200 180">
+            <polygon points="100,165 15,15 185,15" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2" stroke-dasharray="7 7"/>
+            <circle cx="100" cy="165" r="3" fill="rgba(255,255,255,0.6)"/>
+            <circle cx="15" cy="15" r="3" fill="rgba(255,255,255,0.6)"/>
+            <circle cx="185" cy="15" r="3" fill="rgba(255,255,255,0.6)"/>
+          </svg>
+          <div class="placeholder-label" id="placeholderLabel">Кулачковий сканер</div>
+        </div>
+        <div class="scan-live" id="scanLive">
+          <video id="camVideo" autoplay playsinline muted></video>
+          <canvas id="decCanvas" width="340" height="340"></canvas>
+          <div class="scan-line"></div>
+        </div>
+      </div>
+      <button class="scan-btn" id="scanBtn" onclick="toggleScan(this)">Сканувати</button>
+      <div class="scan-status" id="scanStatus"></div>
+    </div>
   </div>
 
 </div>
@@ -420,7 +522,16 @@ async function loadDB() {
   }
 }
 
-let currentLang = 'uk';
+// Мова: спершу дивимось, чи юзер уже колись сам перемкнув тумблер (localStorage),
+// якщо ні — дивимось мову пристрою: uk/ru системи -> українська, решта -> англійська
+function detectLang() {
+  const saved = localStorage.getItem('camDiscLang');
+  if (saved === 'uk' || saved === 'en') return saved;
+  const deviceLang = (navigator.language || 'en').slice(0, 2).toLowerCase();
+  return (deviceLang === 'uk' || deviceLang === 'ru') ? 'uk' : 'en';
+}
+
+let currentLang = detectLang();
 let lastScannedIndex = null; // null = ще нічого не відскановано (порожній стан)
 
 // Initial load
@@ -431,6 +542,7 @@ let lastScannedIndex = null; // null = ще нічого не відсканов
 
 function toggleLang(btn) {
   currentLang = currentLang === 'uk' ? 'en' : 'uk';
+  localStorage.setItem('camDiscLang', currentLang); // запам'ятовуємо ручний вибір на наступне відкриття
   applyLang();
   if (btn) {
     btn.blur();
@@ -454,7 +566,7 @@ function applyLang() {
   }
 
   // якщо панель результату зараз відкрита — перезапускаємо друк новою мовою
-  if (document.getElementById('down').checked) {
+  if (document.getElementById('accordion').classList.contains('state-down')) {
     playReveal();
   }
 }
@@ -491,6 +603,16 @@ const analysisCanvas = document.createElement('canvas');
 analysisCanvas.width = document.getElementById('decCanvas').width;
 analysisCanvas.height = document.getElementById('decCanvas').height;
 const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true });
+
+/* Оптимізація: замість виділення нового Uint8Array(W*H) і нового масиву-черги
+   на кожен виклик tryDecode (кожні 220мс) — виділяємо їх один раз тут і просто
+   перевикористовуємо. Розмір фіксований (analysisCanvas завжди 340×340), тому
+   можна виділити наперед. Це знімає зайве навантаження на збирач сміття (GC),
+   не змінюючи саму логіку пошуку плям нижче. */
+const visitedBuf = new Uint8Array(analysisCanvas.width * analysisCanvas.height);
+const FLOOD_QUEUE_CAP = 4900; // запас: до 4 нових точок на кожен з макс. 1200 реальних приростів плями
+const floodQueueX = new Int32Array(FLOOD_QUEUE_CAP);
+const floodQueueY = new Int32Array(FLOOD_QUEUE_CAP);
 
 /* ================================================================
    ПЛАВНА АНІМАЦІЯ ТРИКУТНИКА-ФОКУСУ (концентричні рамки)
@@ -775,12 +897,26 @@ function stopScan() {
 /* стрілка вниз: гасить камеру і щоразу заново програє друк результату */
 function onDownArrow() {
   stopScan();
+  document.getElementById('accordion').classList.add('state-down');
   playReveal();
 }
 
-/* стрілка вгору: повертає до сканера і скидає друк, щоб наступне розгортання почалось з нуля */
+/* тривалість CSS-переходу grid-template-rows у .content-area / .accordion-container (2.2s) —
+   тримаємо в одному місці, щоб JS-затримка нижче завжди була синхронна з CSS */
+const PANEL_COLLAPSE_MS = 2200;
+
+/* стрілка вгору: повертає до сканера. Текст панелі результату НЕ стирається миттєво —
+   спершу зупиняємо друк/курсор (revealToken++), а сам innerHTML очищаємо тільки
+   після завершення візуального згортання блоку (той самий час, що й CSS-анімація
+   ока/роздільника), щоб текст зникав разом з рухом брови, а не раніше за неї */
 function onUpArrow() {
-  resetPanel();
+  document.getElementById('accordion').classList.remove('state-down');
+  const myToken = ++revealToken;
+  setTimeout(() => {
+    if (myToken === revealToken) {
+      document.getElementById('resultBox').innerHTML = '';
+    }
+  }, PANEL_COLLAPSE_MS);
 }
 
 function scanFrame() {
@@ -864,19 +1000,30 @@ function tryDecode(ctx, W, H) {
   }
 
   const markBlobs = [];
-  const visited = new Uint8Array(W * H);
+  // перевикористовуємо буфер замість виділення нового масиву щокадру
+  visitedBuf.fill(0);
+  const visited = visitedBuf;
 
   for (let y = searchY0; y < searchY1; y += 4) {
     for (let x = searchX0; x < searchX1; x += 4) {
       if (isMark(lum(x, y)) && !visited[y * W + x]) {
-        const queue = [[x, y]];
+        // черга через індекс-вказівник замість push/shift на звичайному масиві —
+        // shift() на масиві завжди O(n) (зсуває всі елементи), тут — O(1)
+        floodQueueX[0] = x; floodQueueY[0] = y;
+        let qHead = 0, qTail = 1;
         let sx = 0, sy = 0, cnt = 0;
-        while (queue.length && cnt < 1200) {
-          const [cx, cy] = queue.shift();
+        while (qHead < qTail && cnt < 1200) {
+          const cx = floodQueueX[qHead], cy = floodQueueY[qHead];
+          qHead++;
           if (cx < 0 || cx >= W || cy < 0 || cy >= H || visited[cy * W + cx] || !isMark(lum(cx, cy))) continue;
           visited[cy * W + cx] = 1;
           sx += cx; sy += cy; cnt++;
-          queue.push([cx + 4, cy], [cx - 4, cy], [cx, cy + 4], [cx, cy - 4]);
+          if (qTail + 4 <= floodQueueX.length) {
+            floodQueueX[qTail] = cx + 4; floodQueueY[qTail] = cy; qTail++;
+            floodQueueX[qTail] = cx - 4; floodQueueY[qTail] = cy; qTail++;
+            floodQueueX[qTail] = cx; floodQueueY[qTail] = cy + 4; qTail++;
+            floodQueueX[qTail] = cx; floodQueueY[qTail] = cy - 4; qTail++;
+          }
         }
         if (cnt > 6 && cnt < 1200) markBlobs.push({ x: sx / cnt, y: sy / cnt, size: cnt });
       }
@@ -1038,7 +1185,7 @@ function finishScan(idx) {
   stopScan();
   lastScannedIndex = idx;
   setResultData(idx);
-  document.getElementById('down').checked = true;
+  document.getElementById('accordion').classList.add('state-down');
   playReveal();
 }
 
